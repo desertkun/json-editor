@@ -1,8 +1,8 @@
-/*! JSON Editor v0.7.28 - JSON Schema -> HTML Editor
+/*! JSON Editor v0.7.29 - JSON Schema -> HTML Editor
  * By Jeremy Dorn - https://github.com/jdorn/json-editor/
  * Released under the MIT license
  *
- * Date: 2016-08-07
+ * Date: 2017-02-01
  */
 
 /**
@@ -552,9 +552,22 @@ JSONEditor.prototype = {
         }
       }
     };
-    
-    if(schema.$ref && typeof schema.$ref !== "object" && schema.$ref.substr(0,1) !== "#" && !this.refs[schema.$ref]) {
-      refs[schema.$ref] = true;
+
+    var ref = schema.$ref;
+    if (ref)
+    {
+        // strip # part of the url, if found
+        if (typeof ref == "string")
+        {
+            var hash = ref.indexOf("#");
+            if (hash > 0) {
+                ref = ref.substr(0, hash);
+            }
+        }
+
+        if(typeof ref !== "object" && ref.substr(0,1) !== "#" && !this.refs[ref]) {
+            refs[ref] = true;
+        }
     }
     
     for(var i in schema) {
@@ -624,17 +637,44 @@ JSONEditor.prototype = {
     }
   },
   expandRefs: function(schema) {
-    schema = $extend({},schema);
-    
-    while (schema.$ref) {
-      var ref = schema.$ref;
-      delete schema.$ref;
-      
-      if(!this.refs[ref]) ref = decodeURIComponent(ref);
-      
-      schema = this.extendSchemas(schema,this.refs[ref]);
-    }
-    return schema;
+      schema = $extend({},schema);
+
+      while (schema.$ref) {
+          var ref = schema.$ref;
+          delete schema.$ref;
+
+          if(!this.refs[ref]) ref = decodeURIComponent(ref);
+          var ref_object = this.refs[ref];
+
+          if (!ref_object) {
+              // cannot find the object by ref, try to find the one that matches
+              for (var i in this.refs) {
+                  if (ref.indexOf(i) === 0) {
+                      var path = ref.substr(i.length);
+                      if (path[0] == '#')
+                          path = path.substr(1);
+                      var keys = path.split('/');
+                      var new_ref_object = this.refs[i];
+                      for (var key in keys) {
+                          var key_name = keys[key];
+                          if (!key_name)
+                              continue;
+                          new_ref_object = new_ref_object[key_name];
+                          if (!new_ref_object)
+                              break;
+                      }
+                      if (new_ref_object) {
+                          ref_object = new_ref_object;
+                      }
+
+                      break;
+                  }
+              }
+          }
+
+          schema = this.extendSchemas(schema,ref_object);
+      }
+      return schema;
   },
   expandSchema: function(schema) {
     var self = this;
@@ -4823,7 +4863,9 @@ JSONEditor.defaults.editors.select = JSONEditor.AbstractEditor.extend({
     // Sanitize value before setting it
     var sanitized = value;
     if(this.enum_values.indexOf(sanitized) < 0) {
-      sanitized = this.enum_values[0];
+      if (!this.schema.enumSource) {
+        sanitized = this.enum_values[0];
+      }
     }
 
     if(this.value === sanitized) {
@@ -4962,6 +5004,17 @@ JSONEditor.defaults.editors.select = JSONEditor.AbstractEditor.extend({
         }
         if(this.enumSource[i].filter) {
           this.enumSource[i].filter = this.jsoneditor.compileTemplate(this.enumSource[i].filter, this.template_engine);
+        }
+        // if the source yet is an object, then try to pull the $ref
+        if(this.enumSource[i].source && typeof this.enumSource[i].source == "object") {
+            var src = this.jsoneditor.expandRefs(this.enumSource[i].source);
+            this.enumSource[i].source = [];
+            var j;
+            var keys = Object.keys(src).sort();
+            for (j=0; j<keys.length; j++)
+            {
+                this.enumSource[i].source.push(src[j]);
+            }
         }
       }
     }
@@ -5134,6 +5187,7 @@ JSONEditor.defaults.editors.select = JSONEditor.AbstractEditor.extend({
         this.value = prev_value;
       }
       // Otherwise, set the value to the first select option
+      /*
       else {
         this.input.value = select_options[0];
         this.value = select_options[0] || "";  
@@ -5141,6 +5195,7 @@ JSONEditor.defaults.editors.select = JSONEditor.AbstractEditor.extend({
         else this.jsoneditor.onChange();
         this.jsoneditor.notifyWatchers(this.path);
       }
+      */
       
       this.setupSelect2();
     }
@@ -5179,7 +5234,9 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
     // Sanitize value before setting it
     var sanitized = value;
     if(this.enum_values.indexOf(sanitized) < 0) {
-      sanitized = this.enum_values[0];
+      if (!this.schema.enumSource) {
+        sanitized = this.enum_values[0];
+      }
     }
 
     if(this.value === sanitized) {
@@ -5308,6 +5365,17 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
         }
         if(this.enumSource[i].filter) {
           this.enumSource[i].filter = this.jsoneditor.compileTemplate(this.enumSource[i].filter, this.template_engine);
+        }
+        // if the source yet is an object, then try to pull the $ref
+        if(this.enumSource[i].source && typeof this.enumSource[i].source == "object") {
+            var src = this.jsoneditor.expandRefs(this.enumSource[i].source);
+            this.enumSource[i].source = [];
+            var j;
+            var keys = Object.keys(src).sort();
+            for (j=0; j<keys.length; j++)
+            {
+                this.enumSource[i].source.push(src[j]);
+            }
         }
       }
     }
@@ -5459,6 +5527,7 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
       }
 
       // Otherwise, set the value to the first select option
+      /*
       else {
         this.input.value = select_options[0];
         this.value = select_options[0] || "";
@@ -5466,6 +5535,7 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
         else this.jsoneditor.onChange();
         this.jsoneditor.notifyWatchers(this.path);
       }
+      */
 
       if(this.selectize) {
         // Update the Selectize options
